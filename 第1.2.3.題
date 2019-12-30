@@ -1,0 +1,93 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import time
+import time, random
+import math
+import serial
+from collections import deque    #stack space
+from scipy import signal
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+j=(-1)**0.5
+
+angle = np.linspace(-np.pi, np.pi, 50)
+cirx = np.sin(angle)
+ciry = np.cos(angle)
+ar=[1/4,1/4,1/4,1/4]
+z=np.roots(ar)
+
+plt.figure(figsize=(8,8))
+plt.plot(cirx, ciry,'k-')
+plt.plot(np.real(z), np.imag(z), 'o', markersize=12)
+plt.plot(0, 0, 'x', markersize=12)
+plt.grid()
+
+plt.xlim((-2, 2))
+plt.xlabel('Real')
+plt.ylim((-2, 2))
+plt.ylabel('Imag')
+
+
+
+
+#Display loading 
+class PlotData:
+    def __init__(self, max_entries=30):
+        self.axis_x = deque(maxlen=max_entries)
+        self.axis_y = deque(maxlen=max_entries)
+    def add(self, x, y):
+        self.axis_x.append(x)
+        self.axis_y.append(y)
+
+
+#initial
+fig, (ax,ax2) = plt.subplots(2,1)
+line,  = ax.plot(np.random.randn(100))
+line2, = ax2.plot(np.random.randn(100))
+plt.show(block = False)
+plt.setp(line2,color = 'r')
+
+
+PData2= PlotData(500)
+PData= PlotData(500)
+ax.set_ylim(0,150)    #濾除直流的範圍
+ax2.set_ylim(0,150)
+
+# plot parameters
+print ('plotting data...')
+# open serial port
+strPort='com3'
+ser = serial.Serial(strPort, 115200)
+ser.flush()
+
+start = time.time()
+tmp= deque(maxlen=20)    
+x_fft= np.array(np.linspace(0, 100, 500))
+
+while True:
+    for ii in range(10):    #每10個值畫一次圖 如果電腦慢就10改大一點# 
+
+        try:    #偵錯
+            data = float(ser.readline())
+            tmp.append(data)
+            PData.add((time.time() - start), data-np.mean(tmp))    #去掉直流
+            #PData2.add(time.time() - start, data)    #未除去直流
+        except:            
+            pass
+        
+    if len(PData.axis_y)==500:
+        fft_data= np.array(abs(np.fft.fft(PData.axis_y)))    #PData.axis_y 就是要丟進濾波器的訊號
+        ax.set_xlim(0, 100)
+        data1= signal.lfilter([1/4, 1/4, 1/4,1/4], 1,PData.axis_y )
+        f=np.fft.fft(data1)
+        
+        ax2.set_xlim(0,100)
+        line.set_xdata(x_fft)
+        line.set_ydata(fft_data)
+        line2.set_xdata(x_fft)
+        line2.set_ydata(f)
+        fig.canvas.draw()
+        fig.canvas.flush_events()
