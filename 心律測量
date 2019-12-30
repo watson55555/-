@@ -1,20 +1,81 @@
-$ echo "# Practicing Git" > README.md
+import matplotlib.pyplot as plt
+import numpy as np
+import time
+import time, random
+import math
+import serial
+from collections import deque
+from scipy import signal
 
-$ git init
-Initialized empty Git repository in /private/tmp/practice-git/.git/
 
-$ git add README.md
 
-$ git commit -m "first commit"
-[master (root-commit) adc1a5a] first commit
- 1 file changed, 1 insertion(+)
- create mode 100644 README.md
- $ git remote add origin git@github.com:kaochenlong/practice-git.git
- $ git remote add heart beat git@github.com:kaochenlong/practice-git.git
- $ git push -u origin master
-Counting objects: 3, done.
-Writing objects: 100% (3/3), 228 bytes | 228.00 KiB/s, done.
-Total 3 (delta 0), reused 0 (delta 0)
-To github.com:kaochenlong/practice-git.git
- * [new branch]      master -> master
-Branch master set up to track remote branch master from origin.
+#Display loading 
+class PlotData:
+    def __init__(self, max_entries=30):
+        self.axis_x = deque(maxlen=max_entries)
+        self.axis_y = deque(maxlen=max_entries)
+    def add(self, x, y):
+        self.axis_x.append(x)
+        self.axis_y.append(y)
+
+
+#initial
+fig, (ax,ax2) = plt.subplots(2,1)
+line,  = ax.plot(np.random.randn(100))
+line2, = ax2.plot(np.random.randn(100))
+plt.show(block = False)
+plt.setp(line2,color = 'r')
+
+
+PData2= PlotData(500)
+PData= PlotData(500)
+ax.set_ylim(-5,5)    #濾除直流的範圍
+ax2.set_ylim(-5,5)
+
+
+
+# plot parameters
+print ('plotting data...')
+# open serial port
+strPort='com3'
+ser = serial.Serial(strPort, 115200)
+ser.flush()
+
+start = time.time()
+tmp= deque(maxlen=20)    #設定堆疊的空間大小 可以容納20個值
+hr= deque(maxlen=3)
+heart_rate=deque(maxlen=5)
+SDNN= deque(maxlen=20) #2sec have 200 datas
+while True:
+    for ii in range(10):    #每10個值畫一次圖 如果電腦慢就10改大一點
+
+        try:    #偵錯
+            data = float(ser.readline())
+            tmp.append(data)
+            PData.add(time.time() - start, data-np.mean(tmp))    #去掉直流
+            PData2.add(time.time() - start, data)    #未除去直流
+            data1= signal.lfilter([1/4, 1/4, 1/4,1/4], 1,PData.axis_y )
+            #HEART RATE
+            hr.append(PData.axis_x[np.argmax(np.array(data1)[:100],axis=0)])#抓輸入的前100個找最大 才能避免都是同一值為最大
+            if hr[2]!=hr[1]:    #prevent dividing by 0 due to same maxmum value in period
+                heart_rate.append(60/(hr[2]-hr[1]))
+                if np.mean(heart_rate)<150:
+                    print(np.mean(heart_rate))    #輸出前5次平均的心跳
+            #
+            
+            #HRV
+                SDNN.append(hr[2]-hr[1])    #collect time between peak
+                SDNN_std= np.std(SDNN)*100    #因為讀取資料的週期是10ms SDNN要以1ms當單位 所以要乘100
+                #print("the SDNN is ",SDNN_std)
+            
+        except:
+            pass
+    data1= signal.lfilter([1/4, 1/4, 1/4,1/4], 1,PData.axis_y )
+    ax.set_xlim(PData.axis_x[0], PData.axis_x[0]+5)                              #時間軸長短設定
+    ax2.set_xlim(PData.axis_x[0], PData.axis_x[0]+5)
+    line.set_xdata(PData.axis_x)
+    line.set_ydata(PData.axis_y)
+    line2.set_xdata(PData.axis_x)
+    line2.set_ydata(data1)
+    fig.canvas.draw()
+    fig.canvas.flush_events()
